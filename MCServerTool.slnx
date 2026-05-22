@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/ImTK/">
+    <Project Path="ImTK/ImTK.Silk/ImTK.Silk.csproj" />
+    <Project Path="ImTK/ImTK/ImTK.csproj" />
+  </Folder>
+  <Folder Name="/MCServerTool/">
+    <Project Path="MCServerTool/MCServerTool/MCServerTool.csproj" />
+  </Folder>
+</Solution>
