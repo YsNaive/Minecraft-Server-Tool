@@ -1,30 +1,134 @@
 using System;
+using System.Collections.Generic;
 using ImGuiNET;
 using ImTK.UI;
+using ImTK.Core;
 using MCServerTool.Kernel;
 
 namespace MCServerTool.UI
 {
     public class ServerInfoWindow : Window
     {
+        private Dictionary<string, IFieldDrawer> _drawers = new Dictionary<string, IFieldDrawer>();
+        private string? _currentInstanceId = null;
+
         public ServerInfoWindow() : base("Server Info", "ServerInfoWindow")
         {
             // Windows are not closable by default unless a close button is drawn.
         }
 
-        protected override void OnRenderSelf()
+        private void InitializeDrawers(Data.ServerInstance instance)
+        {
+            _drawers.Clear();
+            hierarchy.Clear(); // Clear any previously added visual elements
+
+            // Note: the drawers are typed based on property types.
+            // string properties
+            _drawers["Name"] = FieldDrawerFactory.Create().FromType(typeof(string)).Label("Name").FromValue(instance.Name).Build();
+            _drawers["Version"] = FieldDrawerFactory.Create().FromType(typeof(string)).Label("Version").FromValue(instance.Version).Build();
+            _drawers["Core"] = FieldDrawerFactory.Create().FromType(typeof(string)).Label("Core").FromValue(instance.Core).Build();
+            _drawers["Executable"] = FieldDrawerFactory.Create().FromType(typeof(string)).Label("Executable").FromValue(instance.ExecutableName).Build();
+            _drawers["WorkingDirectory"] = FieldDrawerFactory.Create().FromType(typeof(string)).Label("Working Directory").FromValue(instance.WorkingDirectory).Build();
+            _drawers["JavaPath"] = FieldDrawerFactory.Create().FromType(typeof(string)).Label("Java Path").FromValue(instance.JavaPath).Build();
+            _drawers["JavaArguments"] = FieldDrawerFactory.Create().FromType(typeof(string)).Label("Java Arguments").FromValue(instance.JavaArguments).Build();
+
+            // bool properties
+            _drawers["EulaAccepted"] = FieldDrawerFactory.Create().FromType(typeof(bool)).Label("EULA Accepted").FromValue(instance.EulaAccepted).Build();
+            _drawers["NoGui"] = FieldDrawerFactory.Create().FromType(typeof(bool)).Label("No GUI Flag").FromValue(instance.NoGui).Build();
+
+            // Register callbacks
+            ((FieldDrawer<string>)_drawers["Name"]).RegisterValueChangedCallback(evt => { instance.Name = evt.newValue; SaveInstance(); });
+            ((FieldDrawer<string>)_drawers["Version"]).RegisterValueChangedCallback(evt => { instance.Version = evt.newValue; SaveInstance(); });
+            ((FieldDrawer<string>)_drawers["Core"]).RegisterValueChangedCallback(evt => { instance.Core = evt.newValue; SaveInstance(); });
+            ((FieldDrawer<string>)_drawers["Executable"]).RegisterValueChangedCallback(evt => { instance.ExecutableName = evt.newValue; SaveInstance(); });
+            ((FieldDrawer<string>)_drawers["WorkingDirectory"]).RegisterValueChangedCallback(evt => { instance.WorkingDirectory = evt.newValue; SaveInstance(); });
+            ((FieldDrawer<string>)_drawers["JavaPath"]).RegisterValueChangedCallback(evt => { instance.JavaPath = evt.newValue; SaveInstance(); });
+            ((FieldDrawer<string>)_drawers["JavaArguments"]).RegisterValueChangedCallback(evt => { instance.JavaArguments = evt.newValue; SaveInstance(); });
+
+            ((FieldDrawer<bool>)_drawers["EulaAccepted"]).RegisterValueChangedCallback(evt => { instance.EulaAccepted = evt.newValue; SaveInstance(); });
+            ((FieldDrawer<bool>)_drawers["NoGui"]).RegisterValueChangedCallback(evt => { instance.NoGui = evt.newValue; SaveInstance(); });
+
+            // Add them to hierarchy so they are rendered automatically
+            foreach(var drawer in _drawers.Values)
+            {
+                hierarchy.Add((VisualElement)drawer);
+            }
+
+            _currentInstanceId = instance.Id;
+        }
+
+        private void SaveInstance()
+        {
+            if (KernelContext.Current != null)
+            {
+                ServerManager.Instance.SaveInstance(KernelContext.Current.Instance);
+            }
+        }
+
+        private void SyncDrawerValues(Data.ServerInstance instance)
+        {
+            if (_drawers.Count > 0)
+            {
+                ((FieldDrawer<string>)_drawers["Name"]).SetValueWithoutNotify(instance.Name);
+                ((FieldDrawer<string>)_drawers["Version"]).SetValueWithoutNotify(instance.Version);
+                ((FieldDrawer<string>)_drawers["Core"]).SetValueWithoutNotify(instance.Core);
+                ((FieldDrawer<string>)_drawers["Executable"]).SetValueWithoutNotify(instance.ExecutableName);
+                ((FieldDrawer<string>)_drawers["WorkingDirectory"]).SetValueWithoutNotify(instance.WorkingDirectory);
+                ((FieldDrawer<string>)_drawers["JavaPath"]).SetValueWithoutNotify(instance.JavaPath);
+                ((FieldDrawer<string>)_drawers["JavaArguments"]).SetValueWithoutNotify(instance.JavaArguments);
+                ((FieldDrawer<bool>)_drawers["EulaAccepted"]).SetValueWithoutNotify(instance.EulaAccepted);
+                ((FieldDrawer<bool>)_drawers["NoGui"]).SetValueWithoutNotify(instance.NoGui);
+            }
+        }
+
+        protected override void OnRenderLayout()
         {
             var kernel = KernelContext.Current;
 
             if (kernel == null)
             {
-                ImGui.Text("No server selected.");
+                // Must call Begin/End for the window
+                bool isOpenForImGui = m_isOpen;
+                bool isExpanded = Begin(ref isOpenForImGui, flags.Value);
+                if (isExpanded)
+                {
+                    ImGui.Text("No server selected.");
+                }
+                End();
+
+                if (!isOpenForImGui && m_isOpen)
+                {
+                    Close();
+                }
                 return;
             }
 
             var instance = kernel.Instance;
 
-            ImGui.Text($"Editing: {instance.Name}");
+            if (instance != null)
+            {
+                // Check if selected instance has changed or we need initialization
+                if (_currentInstanceId != instance.Id || _drawers.Count == 0)
+                {
+                    InitializeDrawers(instance);
+                }
+                else
+                {
+                    SyncDrawerValues(instance);
+                }
+            }
+
+            // Normal Window base rendering, which will call OnRenderSelf and then render hierarchy (the drawers)
+            base.OnRenderLayout();
+        }
+
+        protected override void OnRenderSelf()
+        {
+            var kernel = KernelContext.Current;
+            if (kernel == null) return;
+            var instance = kernel.Instance;
+
+            ImGui.Text($"Editing: {instance?.Name}");
             ImGui.Separator();
 
             // Status and Controls
@@ -46,70 +150,7 @@ namespace MCServerTool.UI
             }
 
             ImGui.Separator();
-
-            // Edit Fields
-            string name = instance.Name;
-            if (ImGui.InputText("Name", ref name, 128))
-            {
-                instance.Name = name;
-                ServerManager.Instance.SaveInstance(instance);
-            }
-
-            string version = instance.Version;
-            if (ImGui.InputText("Version", ref version, 32))
-            {
-                instance.Version = version;
-                ServerManager.Instance.SaveInstance(instance);
-            }
-
-            string core = instance.Core;
-            if (ImGui.InputText("Core", ref core, 32))
-            {
-                instance.Core = core;
-                ServerManager.Instance.SaveInstance(instance);
-            }
-
-            string executable = instance.ExecutableName;
-            if (ImGui.InputText("Executable", ref executable, 128))
-            {
-                instance.ExecutableName = executable;
-                ServerManager.Instance.SaveInstance(instance);
-            }
-
-            string workingDir = instance.WorkingDirectory;
-            if (ImGui.InputText("Working Directory", ref workingDir, 256))
-            {
-                instance.WorkingDirectory = workingDir;
-                ServerManager.Instance.SaveInstance(instance);
-            }
-
-            string javaPath = instance.JavaPath;
-            if (ImGui.InputText("Java Path", ref javaPath, 256))
-            {
-                instance.JavaPath = javaPath;
-                ServerManager.Instance.SaveInstance(instance);
-            }
-
-            string javaArgs = instance.JavaArguments;
-            if (ImGui.InputText("Java Arguments", ref javaArgs, 256))
-            {
-                instance.JavaArguments = javaArgs;
-                ServerManager.Instance.SaveInstance(instance);
-            }
-
-            bool eula = instance.EulaAccepted;
-            if (ImGui.Checkbox("EULA Accepted", ref eula))
-            {
-                instance.EulaAccepted = eula;
-                ServerManager.Instance.SaveInstance(instance);
-            }
-
-            bool noGui = instance.NoGui;
-            if (ImGui.Checkbox("No GUI Flag", ref noGui))
-            {
-                instance.NoGui = noGui;
-                ServerManager.Instance.SaveInstance(instance);
-            }
+            // Rest of fields are rendered by hierarchy automatically
         }
     }
 }

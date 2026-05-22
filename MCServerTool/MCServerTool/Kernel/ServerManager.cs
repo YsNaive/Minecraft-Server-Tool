@@ -66,11 +66,38 @@ namespace MCServerTool.Kernel
             File.WriteAllText(file, json);
         }
 
-        public KernelContext CreateNewInstance()
+        public KernelContext CreateNewInstance(string name = "New Server", string workingDirectory = "%Auto%")
         {
             var instance = new ServerInstance();
-            // Default working directory to a subfolder based on id
-            instance.WorkingDirectory = Path.Combine(ImTKEnvironment.LocalDataPath, "servers", instance.Id);
+            instance.Name = name;
+
+            bool isAuto = string.IsNullOrWhiteSpace(workingDirectory) || workingDirectory == "%Auto%";
+            bool isValid = true;
+
+            if (!isAuto)
+            {
+                // Validate path
+                var invalidChars = Path.GetInvalidPathChars();
+                if (workingDirectory.IndexOfAny(invalidChars) >= 0)
+                {
+                    isValid = false;
+                }
+            }
+
+            if (isAuto || !isValid)
+            {
+                // Default working directory to a subfolder based on id
+                instance.WorkingDirectory = Path.Combine(ImTKEnvironment.LocalDataPath, "servers", instance.Id);
+            }
+            else
+            {
+                instance.WorkingDirectory = workingDirectory;
+            }
+
+            if (!Directory.Exists(instance.WorkingDirectory))
+            {
+                Directory.CreateDirectory(instance.WorkingDirectory);
+            }
 
             SaveInstance(instance);
 

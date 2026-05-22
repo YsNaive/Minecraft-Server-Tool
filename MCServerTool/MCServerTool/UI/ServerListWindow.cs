@@ -15,14 +15,6 @@ namespace MCServerTool.UI
 
         protected override void OnRenderSelf()
         {
-            if (ImGui.Button("Add Server", new System.Numerics.Vector2(-1, 0)))
-            {
-                var kernel = ServerManager.Instance.CreateNewInstance();
-                KernelContext.Current = kernel;
-            }
-
-            ImGui.Separator();
-
             var kernels = ServerManager.Instance.Kernels;
             foreach (var kernel in kernels)
             {
